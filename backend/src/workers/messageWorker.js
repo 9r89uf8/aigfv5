@@ -5,6 +5,8 @@ import { generateResponse } from '../services/deepseekService.js';
 import { pushMessage } from '../services/cacheService.js';
 import { saveConversation, getMessages } from '../services/firebaseService.js';
 import logger from '../utils/logger.js';
+import { BATCH_WRITE_KEYS, buildBatchWriteKey } from '../utils/redisKeys.js';
+import { config } from '../config/environment.js';
 
 let messageWorker = null;
 
@@ -101,14 +103,24 @@ export const processMessage = async (data, io) => {
       }
     });
 
-    // 4. Generate AI response
+    // 4. Emit typing indicator for AI
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit('typing:start', {
+        userId: characterId,
+        isAI: true,
+        conversationId,
+        timestamp: Date.now()
+      });
+    }
+    
+    // 5. Generate AI response
     const aiResponse = await generateResponse({
       character,
       conversationHistory,
       userMessage: userMessage.content
     });
 
-    // 5. Create AI message object
+    // 6. Create AI message object
     const timestamp = Date.now();
     const messageId = `msg_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
     const aiMessage = {
@@ -121,22 +133,36 @@ export const processMessage = async (data, io) => {
       characterId
     };
 
-    // 6. Save AI message to cache
+    // 7. Save AI message to cache
     await pushMessage(conversationId, aiMessage);
 
-    // 7. Emit AI message to conversation room
+    // 8. Stop typing indicator and emit AI message to conversation room
     if (io) {
+      // Stop typing indicator
+      io.to(`conversation:${conversationId}`).emit('typing:stop', {
+        userId: characterId,
+        isAI: true,
+        conversationId,
+        timestamp: Date.now()
+      });
+      
+      // Emit the AI message
       io.to(`conversation:${conversationId}`).emit('message:receive', {
         message: aiMessage,
         conversationId
       });
     }
 
-    // 8. Save conversation to Firebase (async, optimized single write)
-    saveConversation(conversationId, userId, characterId, [userMessage, aiMessage])
-      .catch(error => {
-        logger.error('Error saving conversation to Firebase (optimized):', error);
-      });
+    // 9. Queue messages for delayed batch write
+    if (config.batchWrite.enabled) {
+      await queueMessagesForBatchWrite(conversationId, userId, characterId, [userMessage, aiMessage]);
+    } else {
+      // Fallback to immediate write if batch writing is disabled
+      saveConversation(conversationId, userId, characterId, [userMessage, aiMessage])
+        .catch(error => {
+          logger.error('Error saving conversation to Firebase:', error);
+        });
+    }
 
     logger.info('Message processed successfully', { 
       conversationId, 
@@ -166,6 +192,50 @@ export const processMessage = async (data, io) => {
     }
 
     throw error;
+  }
+};
+
+const queueMessagesForBatchWrite = async (conversationId, userId, characterId, messages) => {
+  const redis = getRedisClient();
+  const multi = redis.multi();
+  
+  try {
+    // 1. Add messages to pending queue
+    for (const message of messages) {
+      multi.rPush(
+        buildBatchWriteKey('PENDING_MESSAGES', conversationId),
+        JSON.stringify(message)
+      );
+    }
+    
+    // 2. Store conversation metadata (using hSet for multiple fields)
+    multi.hSet(
+      buildBatchWriteKey('CONVERSATION_META', conversationId),
+      {
+        userId,
+        characterId,
+        createdAt: Date.now().toString()
+      }
+    );
+    
+    // 3. Add to write queue with timestamp when it should be written
+    const writeTime = Date.now() + (config.batchWrite.delaySeconds * 1000);
+    multi.zAdd(BATCH_WRITE_KEYS.WRITE_QUEUE, {
+      score: writeTime,
+      value: conversationId
+    });
+    
+    await multi.exec();
+    
+    logger.info('Messages queued for batch write', {
+      conversationId,
+      messageCount: messages.length,
+      delaySeconds: config.batchWrite.delaySeconds
+    });
+  } catch (error) {
+    logger.error('Error queuing messages for batch write', { conversationId, error });
+    // Fallback to immediate write on queue failure
+    await saveConversation(conversationId, userId, characterId, messages);
   }
 };
 

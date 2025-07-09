@@ -121,6 +121,16 @@ export const config = {
     minContextMessages: parseInt(process.env.AI_MIN_CONTEXT_MESSAGES || '2'),
     // Enable debug logging for AI context
     debugContext: process.env.AI_DEBUG_CONTEXT === 'true' || process.env.NODE_ENV === 'development'
+  },
+  
+  // Batch write configuration
+  batchWrite: {
+    enabled: process.env.BATCH_WRITE_ENABLED === 'true' || true,
+    delaySeconds: parseInt(process.env.BATCH_WRITE_DELAY || '120'), // 2 minutes
+    pollIntervalSeconds: parseInt(process.env.BATCH_WRITE_POLL_INTERVAL || '30'),
+    maxMessagesPerBatch: parseInt(process.env.BATCH_WRITE_MAX_MESSAGES || '500'),
+    retryAttempts: parseInt(process.env.BATCH_WRITE_RETRY_ATTEMPTS || '3'),
+    dlqKey: 'dlq:failed_writes'
   }
 };
 

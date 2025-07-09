@@ -9,6 +9,7 @@ import { initializeDeepSeek } from './config/deepseek.js';
 import { initializeSocket } from './config/socket.js';
 import { registerMessageHandlers } from './handlers/simpleMessageHandler.js';
 import { initializeWorker, shutdownWorker } from './workers/messageWorker.js';
+import { initializeBatchWriteWorker, shutdownBatchWriteWorker, getBatchWriteHealth } from './workers/batchWriteWorker.js';
 import { initializeMessageQueue, closeQueue } from './queues/messageQueue.js';
 import { closeRedisConnection } from './config/redis.js';
 import logger from './utils/logger.js';
@@ -91,6 +92,11 @@ const startServer = async () => {
     logger.info('Initializing message worker...');
     const messageWorker = await initializeWorker(io);
     logger.info('Message worker initialized');
+    
+    // Initialize batch write worker
+    logger.info('Initializing batch write worker...');
+    await initializeBatchWriteWorker();
+    logger.info('Batch write worker initialized');
 
     // Graceful shutdown handling
     const gracefulShutdown = async (signal) => {
@@ -101,9 +107,13 @@ const startServer = async () => {
         logger.info('HTTP server closed');
         
         try {
-          // Shutdown worker
+          // Shutdown message worker
           logger.info('Shutting down message worker...');
           await shutdownWorker(messageWorker);
+          
+          // Shutdown batch write worker
+          logger.info('Shutting down batch write worker...');
+          await shutdownBatchWriteWorker();
           
           // Close queue
           logger.info('Closing message queue...');

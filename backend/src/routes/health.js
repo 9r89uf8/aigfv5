@@ -7,6 +7,7 @@ import { getFirebaseFirestore } from '../config/firebase.js';
 import { isServiceAvailable } from '../services/deepseekService.js';
 import { getQueueStats } from '../queues/messageQueue.js';
 import { getRedisClient, isRedisConnected } from '../config/redis.js';
+import { getBatchWriteHealth } from '../workers/batchWriteWorker.js';
 import logger from '../utils/logger.js';
 
 const router = Router();
@@ -120,6 +121,19 @@ router.get('/queue', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+/**
+ * Batch write health check
+ * GET /health/batch-write
+ */
+router.get('/batch-write', async (req, res) => {
+  try {
+    const health = await getBatchWriteHealth();
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get batch write health' });
   }
 });
 
