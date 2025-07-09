@@ -125,7 +125,7 @@ export const config = {
   
   // Batch write configuration
   batchWrite: {
-    enabled: process.env.BATCH_WRITE_ENABLED === 'true' || true,
+    enabled: process.env.BATCH_WRITE_ENABLED === 'true' || process.env.BATCH_WRITE_ENABLED === undefined,
     delaySeconds: parseInt(process.env.BATCH_WRITE_DELAY || '120'), // 2 minutes
     pollIntervalSeconds: parseInt(process.env.BATCH_WRITE_POLL_INTERVAL || '30'),
     maxMessagesPerBatch: parseInt(process.env.BATCH_WRITE_MAX_MESSAGES || '500'),
