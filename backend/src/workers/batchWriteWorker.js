@@ -53,12 +53,19 @@ const processWriteQueue = async () => {
       try {
         await writeConversationBatch(conversationId);
         conversationsProcessed.push(conversationId);
-        
-        // Remove from queue after successful processing
-        await redis.zRem(BATCH_WRITE_KEYS.WRITE_QUEUE, conversationId);
       } catch (error) {
         logger.error('Error processing conversation batch', { conversationId, error });
-        // Leave in queue to retry next time
+      } finally {
+        // Always remove from queue - if it failed, handleFailedWrite moved it to DLQ
+        // This is a fail-safe to ensure we don't get stuck in infinite retry loops
+        try {
+          await redis.zRem(BATCH_WRITE_KEYS.WRITE_QUEUE, conversationId);
+        } catch (removeError) {
+          logger.error('Failed to remove conversation from write queue', { 
+            conversationId, 
+            error: removeError 
+          });
+        }
       }
     }
 
@@ -164,9 +171,21 @@ const handleFailedWrite = async (conversationId, error) => {
 
     // Clean up original keys to prevent reprocessing
     await cleanupConversationKeys(conversationId);
+    
+    // IMPORTANT: Also remove from the write queue to prevent infinite retries
+    await redis.zRem(BATCH_WRITE_KEYS.WRITE_QUEUE, conversationId);
+    
+    logger.info('Failed conversation moved to DLQ and removed from queue', { conversationId });
 
   } catch (dlqError) {
     logger.error('Failed to add to DLQ', { conversationId, error: dlqError });
+    
+    // Even if DLQ fails, remove from write queue to prevent infinite retries
+    try {
+      await redis.zRem(BATCH_WRITE_KEYS.WRITE_QUEUE, conversationId);
+    } catch (removeError) {
+      logger.error('Failed to remove from write queue', { conversationId, error: removeError });
+    }
   }
 };
 
