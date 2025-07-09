@@ -1,0 +1,85 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Firebase
+firebase-debug.log
+.firebase/
+firebase-service-account.json
+serviceAccountKey.json
+
+# Google Cloud
+google-cloud-key.json
+gcs-key.json
+
+# Test artifacts
+__tests__/coverage/
+test-results/
+
+# Redis
+dump.rdb
+
+# Uploads (local development)
+uploads/
+media/
+
+# Documentation build
+docs/_build/
+
+# PM2
+.pm2/
+pm2.json
+ecosystem.config.js
+
+# Certificates
+*.pem
+*.key
+*.crt
+
+# Backup files
+*.backup
+*.bak
+
+# Cache
+.cache/
+.parcel-cache/ 
